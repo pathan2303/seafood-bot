@@ -1,0 +1,23 @@
+{
+  "name": "seafood-bot",
+  "version": "1.0.0",
+  "description": "WhatsApp bot for Sea Food Kings",
+  "main": "seafood.js",
+  "scripts": {
+    "start": "node seafood.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "whatsapp",
+    "bot",
+    "seafood"
+  ],
+  "author": "Shabaz",
+  "license": "ISC",
+  "dependencies": {
+    "@whiskeysockets/baileys": "^6.7.18",
+    "@hapi/boom": "^10.0.1",
+    "pino": "^9.7.0",
+    "qrcode": "^1.5.4"
+  }
+}
