@@ -84,8 +84,8 @@ const startBot = async () => {
             logger: P({ level: 'info' }),
             auth: state,
             msgRetryCounter: 3,
-            defaultQueryTimeoutMs: 120000,
-            keepAliveIntervalMs: 15000
+            defaultQueryTimeoutMs: 120000
+            // keepAliveIntervalMs: 15000 // Disabled to prevent reconnect spam
         });
 
         // Store manual chat numbers and processed messages
@@ -111,13 +111,13 @@ const startBot = async () => {
                 const statusCode = lastDisconnect?.error?.output?.statusCode;
                 console.log('Connection closed:', { statusCode, message: lastDisconnect?.error?.message });
                 if (statusCode !== DisconnectReason.loggedOut) {
-                    console.log('Reconnecting in 5s...');
-                    setTimeout(startBot, 5000);
+                    console.log('Reconnecting in 10s...');
+                    setTimeout(startBot, 10000);
                 } else {
                     console.log('Logged out, clearing auth_info');
                     require('fs').rmSync('./auth_info', { recursive: true, force: true });
-                    console.log('Restarting bot in 5s...');
-                    setTimeout(startBot, 5000);
+                    console.log('Restarting bot in 10s...');
+                    setTimeout(startBot, 10000);
                 }
             }
         });
@@ -245,11 +245,13 @@ Order successful!
 - Quantity: *${quantity} ${item.unit}*
 - Total: *₹${total.toFixed(2)}*
 ${netWeightNote ? `- Note: ${netWeightNote}\n` : ''}Kindly order 1 day in advance. For bulk orders (>5kg), give 2-3 days notice.
-Thank you for your order! We'll confirm delivery soon.
-`;
+Thank you for your order.
+!We'll confirm delivery soon.
+};
                         await sock.sendMessage(SHABAZ_NUMBER, { text: `New order from ${from}: ${item.desc}, ${quantity} ${item.unit}, ₹${total.toFixed(2)}` });
                         userState.delete(from);
                         await sock.sendMessage(from, { text: orderDetails });
+                        console.log(`Sent order confirmation for ${from}: ${itemKey}, ${quantity} ${item.unit} to ${from}`);
                         console.log(`Sent order confirmation for ${itemKey}, ${quantity} ${item.unit} to ${from}`);
                     }
                 }
@@ -257,10 +259,13 @@ Thank you for your order! We'll confirm delivery soon.
                 else if (userState.get(from)?.step === 'option_2') {
                     await sock.sendMessage(SHABAZ_NUMBER, { text: `New complaint from ${from}: ${messageText}` });
                     const response = `
-Your complaint has been submitted:
-"${messageText}"
-We'll address it soon. Thank you!
+Your complaint has been sent:
+submitted:
+"${messageText}"`
+We'll address it soon.
+Thank you!
 `;
+                    await sock.sendMessage(from, { text: response });
                     userState.delete(from);
                     await sock.sendMessage(from, { text: response });
                     console.log(`Sent complaint confirmation to ${from}`);
@@ -284,13 +289,13 @@ He'll reach out soon. Thank you!
                     switch (messageText.trim()) {
                         case '1':
                             response = `
-🛒 *Order Seafood* 🦐
+🦐 *Order Seafood* 🦐
 *Notice*: Kindly order 1 day in advance. For bulk orders, give 2-3 days notice. Prices are pre-cleaning; fish net weight ~70-75%, prawns ~50-55% after cleaning.
 
 *Our Products*:
 ${products.map((item, index) => `${index + 1}. ${item.desc} - ₹${item.price}/${item.unit}`).join('\n')}
 
-Reply with the item number (e.g., "1" for ${products[0].desc}) or item name (e.g., "Prawns 10/12").
+Reply with the item number (e.g., "1" for ${products[0].desc}) or name (e.g., "Prawns 10/12").
 `;
                             break;
                         case '2':
