@@ -1,3 +1,14 @@
+const http = require('http');
+const server = http.createServer((req, res) => {
+    if (req.url === '/healthz') {
+        res.writeHead(200);
+        res.end('OK');
+    } else {
+        res.writeHead(404);
+        res.end('Not Found');
+    }
+});
+server.listen(process.env.PORT || 3000, () => console.log('HTTP server running on port', process.env.PORT || 3000));
 const { default: makeWASocket, useMultiFileAuthState, DisconnectReason } = require('@whiskeysockets/baileys');
    const { Boom } = require('@hapi/boom');
    const P = require('pino');
