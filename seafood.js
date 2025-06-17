@@ -1,20 +1,22 @@
 const http = require('http');
-const server = http.createServer((req, res) => {
-    if (req.url === '/healthz') {
-        res.writeHead(200);
-        res.end('OK');
-    } else {
-        res.writeHead(404);
-        res.end('Not Found');
-    }
-});
-server.listen(process.env.PORT || 3000, () => console.log('HTTP server running on port', process.env.PORT || 3000));
-const { default: makeWASocket, useMultiFileAuthState, DisconnectReason } = require('@whiskeysockets/baileys');
+   const { default: makeWASocket, useMultiFileAuthState, DisconnectReason } = require('@whiskeysockets/baileys');
    const { Boom } = require('@hapi/boom');
    const P = require('pino');
    const QRCode = require('qrcode');
 
-   // Seafood product list with numbered selection
+   // HTTP server for Render Web Service
+   const server = http.createServer((req, res) => {
+       if (req.url === '/healthz') {
+           res.writeHead(200);
+           res.end('OK');
+       } else {
+           res.writeHead(404);
+           res.end('Not Found');
+       }
+   });
+   server.listen(process.env.PORT || 3000, () => console.log('HTTP server running on port', process.env.PORT || 3000));
+
+   // Seafood product list
    const products = [
        { key: 'prawns 10/12', price: 1000, unit: 'kg', desc: 'Prawns 10/12 pcs (pre-cleaning, 50-55% net weight after deveining)' },
        { key: 'prawns 15/18', price: 850, unit: 'kg', desc: 'Prawns 15/18 pcs (pre-cleaning, 50-55% net weight after deveining)' },
@@ -56,9 +58,9 @@ const { default: makeWASocket, useMultiFileAuthState, DisconnectReason } = requi
        { key: 'crab xl', price: 2000, unit: 'kg', desc: 'Crab 1 XL' }
    ];
 
-   // Personal number for forwarding
-   const SHABAZ_NUMBER = '919167455556@s.whatsapp.net'; // +919167455556
-   const BOT_NUMBER = '9152299833@s.whatsapp.net'; // +9152299833
+   // Personal and bot numbers
+   const SHABAZ_NUMBER = '919167455556@s.whatsapp.net';
+   const BOT_NUMBER = '9152299833@s.whatsapp.net';
 
    // Setup authentication
    const startBot = async () => {
@@ -67,14 +69,14 @@ const { default: makeWASocket, useMultiFileAuthState, DisconnectReason } = requi
            logger: P({ level: 'info' }),
            auth: state,
            msgRetryCounter: 3,
-           defaultQueryTimeoutMs: 30000,
+           defaultQueryTimeoutMs: 90000,
            keepAliveIntervalMs: 10000
        });
 
        // Store manual chat numbers
        const manualChats = new Set();
 
-       // Handle connection updates (including QR code)
+       // Handle connection updates
        sock.ev.on('connection.update', async (update) => {
            const { connection, lastDisconnect, qr } = update;
            if (connection === 'open') {
@@ -84,11 +86,6 @@ const { default: makeWASocket, useMultiFileAuthState, DisconnectReason } = requi
                try {
                    const qrText = await QRCode.toString(qr, { type: 'terminal', small: true });
                    console.log(`QR Code (scan with 9152299833 on WhatsApp Linked Devices):\n${qrText}`);
-                   if (sock.authState.creds.me) {
-                       await sock.sendMessage(SHABAZ_NUMBER, { text: `Scan this QR code:\n${qrText}` });
-                   } else {
-                       console.log('Waiting for auth state to send QR code...');
-                   }
                } catch (err) {
                    console.error('Error generating QR code:', err);
                }
@@ -105,23 +102,6 @@ const { default: makeWASocket, useMultiFileAuthState, DisconnectReason } = requi
                }
            }
        });
-
-       // Periodically check auth state to send QR code (for Render)
-       let qrCode = '';
-       sock.ev.on('connection.update', (update) => {
-           if (update.qr) qrCode = update.qr;
-       });
-       const checkAuthAndSendQR = setInterval(async () => {
-           if (qrCode && sock.authState.creds.me) {
-               try {
-                   const qrText = await QRCode.toString(qrCode, { type: 'terminal', small: true });
-                   await sock.sendMessage(SHABAZ_NUMBER, { text: `Scan this QR code:\n${qrText}` });
-                   clearInterval(checkAuthAndSendQR);
-               } catch (err) {
-                   console.error('Error sending QR code:', err);
-               }
-           }
-       }, 5000);
 
        // Save credentials
        sock.ev.on('creds.update', saveCreds);
@@ -147,7 +127,7 @@ const { default: makeWASocket, useMultiFileAuthState, DisconnectReason } = requi
 
                console.log(`Received message from ${from}: "${messageText}" (State: ${JSON.stringify(userState.get(from))})`);
 
-               // Handle manual chat commands from Shabaz
+               // Handle manual chat commands
                if (from === SHABAZ_NUMBER && normalizedText.startsWith('manual ')) {
                    const args = normalizedText.split(' ');
                    if (args.length >= 3 && args[1] === 'on') {
@@ -269,7 +249,7 @@ He'll reach out soon. Thank you!
                    await sock.sendMessage(from, { text: response });
                    console.log(`Forwarded Shabaz query to ${SHABAZ_NUMBER} and sent confirmation to ${from}`);
                }
-               // Handle user selection (1, 2, or 3) for main menu
+               // Handle user selection (1, 2, or 3)
                else if (['1', '2', '3'].includes(messageText.trim())) {
                    userState.set(from, { step: `option_${messageText.trim()}` });
                    let response;
