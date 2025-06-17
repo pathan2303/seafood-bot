@@ -84,12 +84,13 @@ const startBot = async () => {
             logger: P({ level: 'info' }),
             auth: state,
             msgRetryCounter: 3,
-            defaultQueryTimeoutMs: 90000,
-            keepAliveIntervalMs: 10000
+            defaultQueryTimeoutMs: 120000,
+            keepAliveIntervalMs: 15000
         });
 
-        // Store manual chat numbers
+        // Store manual chat numbers and processed messages
         const manualChats = new Set();
+        const processedMessages = new Set();
 
         // Handle connection updates
         sock.ev.on('connection.update', async (update) => {
@@ -107,15 +108,16 @@ const startBot = async () => {
                 console.log('Connected successfully!');
             }
             if (connection === 'close') {
-                const shouldReconnect = lastDisconnect?.error?.output?.statusCode !== DisconnectReason.loggedOut;
-                console.log('Connection closed:', lastDisconnect?.error?.message);
-                if (shouldReconnect) {
-                    console.log('Reconnecting...');
-                    startBot();
+                const statusCode = lastDisconnect?.error?.output?.statusCode;
+                console.log('Connection closed:', { statusCode, message: lastDisconnect?.error?.message });
+                if (statusCode !== DisconnectReason.loggedOut) {
+                    console.log('Reconnecting in 5s...');
+                    setTimeout(startBot, 5000);
                 } else {
                     console.log('Logged out, clearing auth_info');
                     require('fs').rmSync('./auth_info', { recursive: true, force: true });
-                    startBot();
+                    console.log('Restarting bot in 5s...');
+                    setTimeout(startBot, 5000);
                 }
             }
         });
@@ -129,7 +131,16 @@ const startBot = async () => {
         sock.ev.on('messages.upsert', async ({ messages }) => {
             try {
                 const msg = messages[0];
-                if (!msg.message || msg.key.fromMe) return;
+                if (processedMessages.has(msg.key.id)) {
+                    console.log('Skipped duplicate message:', msg.key.id);
+                    return true;
+                }
+                processedMessages.add(msg.key.id);
+                console.log('Message received:', { id: msg.key.id, from: msg.key.remoteJid, text: msg.message?.conversation || msg.message?.extendedTextMessage?.text || '', timestamp: new Date().toISOString() });
+                if (!msg.message || msg.key.fromMe) {
+                    console.log('Skipped: No valid message or self-sent');
+                    return true;
+                }
 
                 const from = msg.key.remoteJid;
                 const isGroup = from.endsWith('@g.us');
@@ -139,10 +150,10 @@ const startBot = async () => {
                 // Ignore group messages
                 if (isGroup) {
                     console.log(`Ignored group message from ${from}: "${messageText}"`);
-                    return;
+                    return true;
                 }
 
-                console.log(`Received message from ${from}: "${messageText}" (State: ${JSON.stringify(userState.get(from))})`);
+                console.log(`Processing message from ${from}: "${messageText}" (State: ${JSON.stringify(userState.get(from))})`);
 
                 // Handle manual chat commands
                 if (from === SHABAZ_NUMBER && normalizedText.startsWith('manual ')) {
@@ -160,14 +171,14 @@ const startBot = async () => {
                     } else {
                         await sock.sendMessage(SHABAZ_NUMBER, { text: 'Usage: manual on <number> or manual off <number> (e.g., manual on 919876543210)' });
                     }
-                    return;
+                    return true;
                 }
 
                 // Handle manual chats
                 if (manualChats.has(from)) {
                     await sock.sendMessage(SHABAZ_NUMBER, { text: `Message from ${from}: "${messageText}"` });
                     console.log(`Forwarded manual chat message from ${from} to ${SHABAZ_NUMBER}`);
-                    return;
+                    return true;
                 }
 
                 // Handle "hi" or "menu" command
@@ -184,7 +195,7 @@ const startBot = async () => {
 _Reply with 1, 2, or 3 to proceed._
 `;
                     await sock.sendMessage(from, { text: menu });
-                    console.log(`Sent menu to ${from}`);
+                    console.log(`Sent menu to ${from} due to "${normalizedText}"`);
                 }
                 // Handle seafood item selection
                 else if (userState.get(from)?.step === 'option_1') {
@@ -313,6 +324,7 @@ Invalid input. Please send "hi" or "menu" to start over.
                     await sock.sendMessage(from, { text: 'Sorry, an error occurred. Please try again or send "hi" for menu.' });
                 }
             }
+            return true;
         });
     } catch (err) {
         console.error('Error loading auth state:', err);
