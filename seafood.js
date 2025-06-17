@@ -1,4 +1,15 @@
 const http = require('http');
+const fs = require('fs');
+const { execSync } = require('child_process');
+console.log('Starting seafood.js...');
+if (!fs.existsSync('./auth_info') && fs.existsSync('./auth_info.zip')) {
+    try {
+        execSync('unzip -o auth_info.zip -d .');
+        console.log('Restored auth_info from zip');
+    } catch (err) {
+        console.error('Error restoring auth_info:', err);
+    }
+}
    const { default: makeWASocket, useMultiFileAuthState, DisconnectReason } = require('@whiskeysockets/baileys');
    const { Boom } = require('@hapi/boom');
    const P = require('pino');
@@ -64,6 +75,15 @@ const http = require('http');
 
    // Setup authentication
    const startBot = async () => {
+    console.log('Initializing bot...');
+    try {
+        const { state, saveCreds } = await useMultiFileAuthState('./auth_info');
+        console.log('Auth state loaded');
+        // ... rest of code
+    } catch (err) {
+        console.error('Error loading auth state:', err);
+    }
+};
        const { state, saveCreds } = await useMultiFileAuthState('./auth_info');
        const sock = makeWASocket({
            logger: P({ level: 'info' }),
@@ -80,6 +100,7 @@ const http = require('http');
        sock.ev.on('connection.update', async (update) => {
            const { connection, lastDisconnect, qr } = update;
            if (connection === 'open') {
+	       console.log('QR generated:', qr);
                console.log('Connected successfully!');
            }
            if (qr) {
