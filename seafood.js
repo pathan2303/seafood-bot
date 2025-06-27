@@ -74,8 +74,8 @@ const SHABAZ_NUMBER = '919167455556@s.whatsapp.net';
 const BOT_NUMBER = '9152299833@s.whatsapp.net';
 
 // Setup authentication
-const startBot = async () => {
-    console.log('Initializing bot...');
+const startBot = async (retryCount = 0, maxRetries = 3) => {
+    console.log(`Initializing bot (Attempt ${retryCount + 1}/${maxRetries})...`);
     try {
         const { state, saveCreds } = await useMultiFileAuthState('./auth_info');
         console.log('Auth state loaded');
@@ -104,19 +104,22 @@ const startBot = async () => {
                 }
             }
             if (connection === 'open') {
-                console.log('Connected successfully!');
+                console.log('Connected successfully! No auto-menu sent.');
             }
             if (connection === 'close') {
                 const statusCode = lastDisconnect?.error?.output?.statusCode;
                 console.log('Connection closed:', { statusCode, message: lastDisconnect?.error?.message });
-                if (statusCode !== DisconnectReason.loggedOut) {
-                    console.log('Reconnecting in 10s...');
-                    setTimeout(startBot, 10000);
+                if (statusCode === 408 && retryCount < maxRetries) {
+                    console.log(`QR refs timeout, retrying (${retryCount + 1}/${maxRetries})...`);
+                    setTimeout(() => startBot(retryCount + 1, maxRetries), 15000);
+                } else if (statusCode !== DisconnectReason.loggedOut) {
+                    console.log('Reconnecting in 15s...');
+                    setTimeout(() => startBot(0, maxRetries), 15000);
                 } else {
                     console.log('Logged out, clearing auth_info');
                     require('fs').rmSync('./auth_info', { recursive: true, force: true });
-                    console.log('Restarting bot in 10s...');
-                    setTimeout(startBot, 10000);
+                    console.log('Restarting bot in 15s...');
+                    setTimeout(() => startBot(0, maxRetries), 15000);
                 }
             }
         });
@@ -129,7 +132,9 @@ const startBot = async () => {
 
         sock.ev.on('messages.upsert', async ({ messages }) => {
             try {
+                console.log('Messages upsert event triggered:', messages.length);
                 const msg = messages[0];
+                console.log('Raw message received:', JSON.stringify(msg, null, 2));
                 if (processedMessages.has(msg.key.id)) {
                     console.log('Skipped duplicate message:', msg.key.id);
                     return true;
@@ -149,6 +154,7 @@ const startBot = async () => {
                     return true;
                 }
                 const normalizedText = messageText.trim().toLowerCase().replace(/\s+/g, ' ');
+                console.log(`Normalized text: "${normalizedText}" from ${from}`);
 
                 // Ignore group messages
                 if (isGroup) {
@@ -331,6 +337,10 @@ Invalid input. Please send "hi" or "menu" to start over.
         });
     } catch (err) {
         console.error('Error loading auth state:', err);
+        if (retryCount < maxRetries) {
+            console.log(`Retrying auth load (${retryCount + 1}/${maxRetries})...`);
+            setTimeout(() => startBot(retryCount + 1, maxRetries), 15000);
+        }
     }
 };
 
