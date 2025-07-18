@@ -236,32 +236,56 @@ Send "menu" to see the list again.
                     }
                 }
                 // Handle quantity input
-                else if (userState.get(from)?.step === 'quantity') {
-                    const quantity = parseFloat(messageText.trim());
-                    if (isNaN(quantity) || quantity <= 0) {
-                        const item = products.find(p => p.key === userState.get(from).item);
-                        const response = `Please enter a valid quantity in ${item.unit === 'kg' ? 'kilograms' : 'pieces'} (e.g., "2").`;
-                        await sock.sendMessage(from, { text: response });
-                        console.log(`Sent invalid quantity response to ${from}`);
-                    } else {
-                        const itemKey = userState.get(from).item;
-                        const item = products.find(p => p.key === itemKey);
-                        const total = item.unit === 'piece' ? item.price * quantity : item.price * quantity;
-                        const netWeightNote = item.unit === 'kg' ? (itemKey.includes('prawns') ? '50-55% net weight after cleaning' : '70-75% net weight after cleaning') : '';
-                        const orderDetails = `
+                // Handle quantity input
+else if (userState.get(from)?.step === 'quantity') {
+    const quantity = parseFloat(messageText.trim());
+    if (isNaN(quantity) || quantity <= 0) {
+        const item = products.find(p => p.key === userState.get(from).item);
+        const response = `Please enter a valid quantity in ${item.unit === 'kg' ? 'kilograms' : 'pieces'} (e.g., "2").`;
+        await sock.sendMessage(from, { text: response });
+        console.log(`Sent invalid quantity response to ${from}`);
+    } else {
+        const itemKey = userState.get(from).item;
+        const item = products.find(p => p.key === itemKey);
+        userState.set(from, { step: 'address', item: itemKey, quantity: quantity });
+        const response = `
+Please provide your delivery address for the order:
+- Item: *${item.desc}*
+- Quantity: *${quantity} ${item.unit}*
+`;
+        await sock.sendMessage(from, { text: response });
+        console.log(`Sent address prompt for ${itemKey}, ${quantity} ${item.unit} to ${from}`);
+    }
+}
+// Handle address input
+else if (userState.get(from)?.step === 'address') {
+    const address = messageText.trim();
+    if (address.length < 10) { // Basic validation for address length
+        const item = products.find(p => p.key === userState.get(from).item);
+        const response = `Please provide a valid delivery address (at least 10 characters).`;
+        await sock.sendMessage(from, { text: response });
+        console.log(`Sent invalid address response to ${from}`);
+    } else {
+        const itemKey = userState.get(from).item;
+        const quantity = userState.get(from).quantity;
+        const item = products.find(p => p.key === itemKey);
+        const total = item.unit === 'piece' ? item.price * quantity : item.price * quantity;
+        const netWeightNote = item.unit === 'kg' ? (itemKey.includes('prawns') ? '50-55% net weight after cleaning' : '70-75% net weight after cleaning') : '';
+        const orderDetails = `
 Order successful!
 - Item: *${item.desc}*
 - Quantity: *${quantity} ${item.unit}*
 - Total: *₹${total.toFixed(2)}*
+- Delivery Address: *${address}*
 ${netWeightNote ? `- Note: ${netWeightNote}\n` : ''}Kindly order 1 day in advance. For bulk orders (>5kg), give 2-3 days notice.
 Thank you for your order! We'll confirm delivery soon.
 `;
-                        await sock.sendMessage(SHABAZ_NUMBER, { text: `New order from ${from}: ${item.desc}, ${quantity} ${item.unit}, ₹${total.toFixed(2)}` });
-                        userState.delete(from);
-                        await sock.sendMessage(from, { text: orderDetails });
-                        console.log(`Sent order confirmation for ${itemKey}, ${quantity} ${item.unit} to ${from}`);
-                    }
-                }
+        await sock.sendMessage(SHABAZ_NUMBER, { text: `New order from ${from}: ${item.desc}, ${quantity} ${item.unit}, ₹${total.toFixed(2)}, Address: ${address}` });
+        userState.delete(from);
+        await sock.sendMessage(from, { text: orderDetails });
+        console.log(`Sent order confirmation for ${itemKey}, ${quantity} ${item.unit}, Address: ${address} to ${from}`);
+    }
+}
                 // Handle complaint submission
                 else if (userState.get(from)?.step === 'option_2') {
                     await sock.sendMessage(SHABAZ_NUMBER, { text: `New complaint from ${from}: ${messageText}` });
